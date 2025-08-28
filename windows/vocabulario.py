@@ -54,11 +54,12 @@ class VocabularioWindow:
         top.title(titulo)
 
         tk.Label(top, text=mensaje, fg="blue").pack(pady=5)
+
         tk.Label(top, text="Palabra en inglés").pack()
         palabra_entry = tk.Entry(top)
         palabra_entry.pack()
 
-        tk.Label(top, text="Traducción en español").pack()
+        tk.Label(top, text="Traducción en español (varias separadas por comas)").pack()
         traduccion_entry = tk.Entry(top)
         traduccion_entry.pack()
 
@@ -68,12 +69,16 @@ class VocabularioWindow:
 
         def guardar():
             palabra = palabra_entry.get().strip()
-            traduccion = traduccion_entry.get().strip()
+            traduccion_str = traduccion_entry.get().strip()
             ejemplo = ejemplo_entry.get().strip()
-            if not palabra or not traduccion:
+            if not palabra or not traduccion_str:
                 messagebox.showerror("Error", "Debes rellenar palabra y traducción")
                 return
-            if self.db.insertar_palabra(palabra, traduccion, ejemplo, tipo, self.nivel):
+
+            # Convertir a lista antes de guardar
+            traduccion_lista = [t.strip() for t in traduccion_str.split(",")]
+
+            if self.db.insertar_palabra(palabra, traduccion_lista, ejemplo, tipo, self.nivel):
                 messagebox.showinfo("OK", "✅ Palabra añadida correctamente")
                 top.destroy()
                 self.tarea_diaria()
@@ -81,6 +86,8 @@ class VocabularioWindow:
                 messagebox.showerror("Error", "❌ La palabra ya existe")
 
         tk.Button(top, text="Guardar", command=guardar).pack(pady=5)
+
+
 
     def anadir_palabra_suelta(self):
         top = tk.Toplevel(self.win)
@@ -144,22 +151,26 @@ class VocabularioWindow:
         entry.pack()
 
         def check():
-            if entry.get().strip().lower() == traduccion.lower():
+            respuesta_usuario = entry.get().strip().lower()
+            # Dividir traducciones en lista, quitar espacios y pasar a minúsculas
+            traducciones_posibles = [t.strip().lower() for t in traduccion.split(",")]
+            if respuesta_usuario in traducciones_posibles:
                 self.db.actualizar_estado(palabra_id, "aprendido")
                 messagebox.showinfo("OK", "✅ Correct!")
             else:
                 self.db.actualizar_estado(palabra_id, "repetir")
-                messagebox.showerror("Incorrect", f"Correct: {traduccion}")
+                messagebox.showerror("Incorrect", f"Correct: {', '.join(traducciones_posibles)}")
             top.destroy()
 
         tk.Button(top, text="Check", command=check).pack()
+
 
     def pregunta_aleatoria(self):
         lista = self.db.obtener_todas_palabras(self.nivel)
         self.revision_lista(lista, "Random Question")
 
     def listar_palabras(self):
-        lista = self.db.obtener_todas_palabras_con_estado(self.nivel)
+        lista = self.db.obtener_todas_palabras_con_estado(self.nivel)  # con estado incluido
         if not lista:
             messagebox.showinfo("Word List", "No words.")
             return
@@ -172,7 +183,13 @@ class VocabularioWindow:
 
             tk.Label(frame, text=f"{palabra} - {traduccion}", width=30, anchor="w").pack(side="left")
             tk.Label(frame, text=f"({tipo}) [{estado}]", width=20, anchor="w").pack(side="left")
+
+            # Mostrar ejemplo en otra línea
+            if ejemplo:
+                tk.Label(top, text=f"Example: {ejemplo}", fg="gray").pack(anchor="w", padx=10)
+
             tk.Button(frame, text="Delete", command=lambda pid=palabra_id: self.eliminar_palabra(pid, top)).pack(side="right")
+
 
     def eliminar_palabra(self, palabra_id, win_list):
         self.db.eliminar_palabra(palabra_id)

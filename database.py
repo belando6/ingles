@@ -2,16 +2,18 @@ import sqlite3
 import datetime
 
 class Database:
-    def __init__(self, db_file="vocabulario.db"):
+    def __init__(self, db_file='X:\\base de datos\\ingles\\ingles.db'):
         self.db_file = db_file
         self.crear_tablas()
 
     def conectar(self):
         return sqlite3.connect(self.db_file)
 
+    # ---------- CREAR TABLAS ----------
     def crear_tablas(self):
         with self.conectar() as conn:
             c = conn.cursor()
+
             # Vocabulario
             c.execute("""
                 CREATE TABLE IF NOT EXISTS vocabulario (
@@ -25,6 +27,7 @@ class Database:
                     estado TEXT
                 )
             """)
+
             # Listening
             c.execute("""
                 CREATE TABLE IF NOT EXISTS listening (
@@ -37,9 +40,23 @@ class Database:
                     pdf TEXT
                 )
             """)
+
+            # Listening preguntas (para cada parte del examen)
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS listening_preguntas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    listening_id INTEGER,
+                    parte INTEGER,
+                    num INTEGER,
+                    pregunta TEXT,
+                    respuesta TEXT,
+                    FOREIGN KEY (listening_id) REFERENCES listening(id) ON DELETE CASCADE
+                )
+            """)
+
             conn.commit()
 
-    # ----- VOCABULARIO -----
+    # ---------- VOCABULARIO ----------
     def palabra_existe(self, palabra, nivel):
         with self.conectar() as conn:
             c = conn.cursor()
@@ -52,9 +69,10 @@ class Database:
         with self.conectar() as conn:
             c = conn.cursor()
             fecha = datetime.date.today().isoformat()
-            c.execute("""INSERT INTO vocabulario (palabra, traduccion, ejemplo, tipo, nivel, fecha, estado)
-                         VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                         (palabra, traduccion, ejemplo, tipo, nivel, fecha, estado))
+            c.execute("""
+                INSERT INTO vocabulario (palabra, traduccion, ejemplo, tipo, nivel, fecha, estado)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (palabra, traduccion, ejemplo, tipo, nivel, fecha, estado))
             conn.commit()
         return True
 
@@ -75,12 +93,6 @@ class Database:
             c.execute(query, tuple(params))
             return c.fetchall()
 
-    def obtener_todas_palabras(self, nivel):
-        with self.conectar() as conn:
-            c = conn.cursor()
-            c.execute("SELECT id, palabra, traduccion, ejemplo, tipo FROM vocabulario WHERE nivel=?", (nivel,))
-            return c.fetchall()
-
     def actualizar_estado(self, id_palabra, nuevo_estado):
         with self.conectar() as conn:
             c = conn.cursor()
@@ -93,41 +105,16 @@ class Database:
             c.execute("DELETE FROM vocabulario WHERE id=?", (palabra_id,))
             conn.commit()
 
-    def obtener_estado_palabra(self, id_palabra):
-        with self.conectar() as conn:
-            c = conn.cursor()
-            c.execute("SELECT estado FROM vocabulario WHERE id=?", (id_palabra,))
-            row = c.fetchone()
-            return row[0] if row else None
-
-    def obtener_todas_palabras_con_estado(self, nivel):
-        with self.conectar() as conn:
-            c = conn.cursor()
-            c.execute("SELECT id, palabra, traduccion, ejemplo, tipo, estado FROM vocabulario WHERE nivel=?", (nivel,))
-            return c.fetchall()
-
-
-    # ----- LISTENING -----
+    # ---------- LISTENING ----------
     def insertar_listening(self, nivel, canal, titulo, url, fallos=0, pdf=None):
         with self.conectar() as conn:
             c = conn.cursor()
-            c.execute("""INSERT INTO listening (nivel, canal, titulo, url, fallos, pdf)
-                         VALUES (?, ?, ?, ?, ?, ?)""", (nivel, canal, titulo, url, fallos, pdf))
+            c.execute("""
+                INSERT INTO listening (nivel, canal, titulo, url, fallos, pdf)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (nivel, canal, titulo, url, fallos, pdf))
             conn.commit()
-
-
-    def actualizar_fallos(self, id_audio, fallos):
-        with self.conectar() as conn:
-            c = conn.cursor()
-            c.execute("UPDATE listening SET fallos=? WHERE id=?", (fallos, id_audio))
-            conn.commit()
-
-    def aumentar_fallos(id_audio):
-        conn = sqlite3.connect("vocabulario.db")
-        c = conn.cursor()
-        c.execute("UPDATE listening SET fallos = fallos + 1 WHERE id = ?", (id_audio,))
-        conn.commit()
-        conn.close()
+            return c.lastrowid  # devolvemos el id del audio creado
 
     def obtener_listening(self, nivel=None):
         with self.conectar() as conn:
@@ -142,4 +129,37 @@ class Database:
         with self.conectar() as conn:
             c = conn.cursor()
             c.execute("DELETE FROM listening WHERE id=?", (id_audio,))
-        conn.commit()
+            conn.commit()
+
+    def actualizar_fallos(self, id_audio, fallos):
+        with self.conectar() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE listening SET fallos=? WHERE id=?", (fallos, id_audio))
+            conn.commit()
+
+    # ---------- PREGUNTAS DE LISTENING ----------
+    def insertar_pregunta_listening(self, listening_id, parte, num, pregunta, respuesta):
+        with self.conectar() as conn:
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO listening_preguntas (listening_id, parte, num, pregunta, respuesta)
+                VALUES (?, ?, ?, ?, ?)
+            """, (listening_id, parte, num, pregunta, respuesta))
+            conn.commit()
+
+    def eliminar_preguntas_de_listening(self, listening_id):
+        with self.conectar() as conn:
+            c = conn.cursor()
+            c.execute("DELETE FROM listening_preguntas WHERE listening_id=?", (listening_id,))
+            conn.commit()
+
+    def obtener_preguntas_listening(self, listening_id, parte):
+        with self.conectar() as conn:
+            c = conn.cursor()
+            c.execute("""
+                SELECT id, parte, num, pregunta, respuesta
+                FROM listening_preguntas
+                WHERE listening_id=? AND parte=?
+                ORDER BY num
+            """, (listening_id, parte))
+            return c.fetchall()
